@@ -8983,16 +8983,16 @@ _, SetFreecamToggle, ToggleFreecam = createToggle("Freecam", false, function(ena
             end
 
             local moveVector = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Z) then
                 moveVector = moveVector + Camera.CFrame.LookVector
             end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) or UserInputService:IsKeyDown(Enum.KeyCode.Down) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
                 moveVector = moveVector - Camera.CFrame.LookVector
             end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Left) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
                 moveVector = moveVector - Camera.CFrame.RightVector
             end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.Right) then
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
                 moveVector = moveVector + Camera.CFrame.RightVector
             end
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
