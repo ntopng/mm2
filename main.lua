@@ -1513,9 +1513,8 @@ function unloadMenu()
     flingAllState = false
     if InvisState then pcall(function() toggleInvisibility(false) end) end
     KillAuraState = false
-    MurderHitboxState = false
-    AutoDodgeMurderState = false
-    getgenv()._PearlSilentAimActive = false
+    SheriffAimlockState = false
+    pcall(function() LocalPlayer.CameraMode = Enum.CameraMode.Classic end)
     if playerSpectateConn then pcall(function() playerSpectateConn:Disconnect() end); playerSpectateConn = nil end
     if playerAttachConn then pcall(function() playerAttachConn:Disconnect() end); playerAttachConn = nil end
     if playerAttachBFConn then pcall(function() playerAttachBFConn:Disconnect() end); playerAttachBFConn = nil end
@@ -4122,45 +4121,7 @@ createButton(combatPanel, "Grab Pistol (Instant)", "Ramasse instantanément le p
     grabDroppedPistol(false)
 end)
 
-createButton(combatPanel, "Auto Devenir Sheriff (Steal Gun)", "Fling le Sheriff actuel et récupère son pistolet dès qu'il tombe", 6, function()
-    local myRole = getPlayerRole(LocalPlayer)
-    if myRole == "sheriff" then
-        notify("Sheriff", "Tu es déjà le Sheriff !", Colors.Success)
-        return
-    elseif myRole == "murder" then
-        notify("Sheriff", "Tu es le Meurtrier !", Colors.Warning)
-        return
-    end
-    local gunPart = findDroppedGunPart()
-    if gunPart and gunPart.Parent then
-        grabDroppedPistol(false)
-        return
-    end
-    local sheriff = findPlayerByRole("sheriff")
-    if not sheriff then
-        notify("Sheriff", "Aucun Sheriff en vie détecté", Colors.Warning)
-        return
-    end
-    notify("Sheriff", "Éjection de " .. sheriff.DisplayName .. " + attente du GunDrop...", Colors.Info)
-    flingPlayer(sheriff)
-    task.spawn(function()
-        local startWait = tick()
-        while pearlSessionAlive and (tick() - startWait < 8) do
-            if getPlayerRole(LocalPlayer) == "sheriff" then
-                notify("Sheriff", "Tu es devenu le Sheriff !", Colors.Success)
-                return
-            end
-            local drop = findDroppedGunPart()
-            if drop and drop.Parent and not (FlingState and FlingState.Conn) then
-                grabDroppedPistol(false)
-                return
-            end
-            task.wait(0.2)
-        end
-    end)
-end)
-
-_, autoCollectBtn = createToggleCard(combatPanel, "Auto Collect Pistol", "Ramasse automatiquement le GunDrop dès qu'il tombe (0 lag)", 7,
+_, autoCollectBtn = createToggleCard(combatPanel, "Auto Collect Pistol", "Ramasse automatiquement le GunDrop dès qu'il tombe (0 lag)", 6,
     function() return pearlAutoCollectState end,
     function(v)
         pearlAutoCollectState = v
@@ -4178,44 +4139,21 @@ task.spawn(function()
     pcall(function() if gunDescConn then gunDescConn:Disconnect() end end)
 end)
 
-createSectionHeader(combatPanel, "Elimination & Survie MM2", 8)
+createSectionHeader(combatPanel, "Elimination & Kill Aura", 7)
 
 KillAuraState = false
 KillAuraRange = 25
-MurderHitboxState = false
-MurderHitboxSize = 18
-AutoDodgeMurderState = false
-AutoDodgeDistance = 16
+SheriffAimlockState = false
+local wasForcedFirstPerson = false
 
-getgenv()._PearlSilentAimActive = false
-getgenv()._PearlSilentAimPos = nil
-getgenv()._PearlSilentAimPart = nil
-
-pcall(function()
-    if not getgenv()._PearlSafeSilentAimInstalled and hookmetamethod and newcclosure then
-        getgenv()._PearlSafeSilentAimInstalled = true
-        local mouse = LocalPlayer:GetMouse()
-        local oldIndex
-        oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
-            if getgenv()._PearlSilentAimActive and (key == "Hit" or key == "Target" or key == "UnitRay") then
-                local tPos = getgenv()._PearlSilentAimPos
-                if tPos and self == mouse then
-                    if key == "Hit" then
-                        return CFrame.new(tPos)
-                    elseif key == "Target" then
-                        return getgenv()._PearlSilentAimPart
-                    elseif key == "UnitRay" then
-                        local cam = workspace.CurrentCamera
-                        local orig = (cam and cam.CFrame.Position) or Vector3.zero
-                        local dir = (tPos - orig)
-                        return Ray.new(orig, dir.Magnitude > 0.01 and dir.Unit or Vector3.new(0, 0, -1))
-                    end
-                end
-            end
-            return oldIndex(self, key)
-        end))
+local function restoreClassicCamera()
+    if wasForcedFirstPerson then
+        wasForcedFirstPerson = false
+        pcall(function()
+            LocalPlayer.CameraMode = Enum.CameraMode.Classic
+        end)
     end
-end)
+end
 
 function stopKillAll()
     if killAllConn then
@@ -4398,68 +4336,94 @@ function setKillAll(v)
     end
 end
 
-_, killAllCardBtn = createToggleCard(combatPanel, "Kill All (Meurtrier)", "Téléporte et élimine tous les joueurs au couteau", 9,
+_, killAllCardBtn = createToggleCard(combatPanel, "Kill All (Meurtrier)", "Téléporte et élimine tous les joueurs au couteau", 8,
     function() return killAllToggleState end,
     setKillAll)
 killAllBtn = killAllCardBtn
 
-_, killAuraBtn = createToggleCard(combatPanel, "Kill Aura (Meurtrier)", "Tue automatiquement au couteau tout joueur dans le rayon (jusqu'à 1000m)", 10,
+_, killAuraBtn = createToggleCard(combatPanel, "Kill Aura (Meurtrier)", "Tue automatiquement au couteau tout joueur dans le rayon (jusqu'à 1000m)", 9,
     function() return KillAuraState end,
     function(v) KillAuraState = v end)
 
-setKillAuraSlider = createValueSlider(combatPanel, 11, "Rayon Kill Aura (Studs / m)", 8, 1000, 25, function(val)
+setKillAuraSlider = createValueSlider(combatPanel, 10, "Rayon Kill Aura (Studs / m)", 8, 1000, 25, function(val)
     KillAuraRange = val
 end)
 
--- Remet toutes les hitboxes des joueurs a leur taille normale
-local function resetAllHitboxes()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local r = p.Character:FindFirstChild("HumanoidRootPart")
-            if r then
-                pcall(function()
-                    r.Size = Vector3.new(2, 2, 1)
-                    r.Transparency = 1
-                    r.CanCollide = false
-                end)
-            end
-        end
-    end
-end
-
-_, murderHitboxBtn = createToggleCard(combatPanel, "Hitbox Expander Meurtrier (Sheriff)", "Agrandit la hitbox du meurtrier en rouge néon pour ne jamais le rater au pistolet", 12,
-    function() return MurderHitboxState end,
+_, sheriffAimlockBtn = createToggleCard(combatPanel, "Aimlock Meurtrier (Sheriff)", "Verrouille ton viseur en 1ère personne pile sur le torse du meurtrier quand tu sors le pistolet", 11,
+    function() return SheriffAimlockState end,
     function(v)
-        MurderHitboxState = v
+        SheriffAimlockState = v
         if not v then
-            getgenv()._PearlSilentAimActive = false
-            resetAllHitboxes()
+            restoreClassicCamera()
         end
     end)
 
-setMurderHitboxSlider = createValueSlider(combatPanel, 13, "Taille Hitbox Meurtrier", 6, 40, 18, function(val)
-    MurderHitboxSize = val
-end)
-
-_, autoDodgeMurderBtn = createToggleCard(combatPanel, "Auto Dodge Meurtrier (Ultra Instinct)", "Te téléporte automatiquement loin du meurtrier dès qu'il s'approche trop près", 14,
-    function() return AutoDodgeMurderState end,
-    function(v) AutoDodgeMurderState = v end)
-
-setAutoDodgeSlider = createValueSlider(combatPanel, 15, "Distance Esquive Meurtrier (Studs)", 10, 30, 16, function(val)
-    AutoDodgeDistance = val
-end)
-
 -- ============================================================================
--- BOUCLE KILL AURA (COUTEAU), HITBOX EXPANDER MEURTRIER & AUTO DODGE MEURTRIER
+-- BOUCLE KILL AURA (COUTEAU) & AIMLOCK MEURTRIER 1ERE PERSONNE (SHERIFF)
 -- ============================================================================
 do
     local lastAuraTime = 0
-    local lastDodgeTime = 0
+
+    -- Aimlock 100% Fiable : Quand tu tiens le pistolet en main et que le meurtrier est en vie,
+    -- passe en LockFirstPerson (le curseur Roblox est verrouillé au centre exact de l'écran et ton corps ne gêne pas)
+    -- et verrouille la caméra pile sur le centre du torse serveur du meurtrier ! Dès que tu ranges l'arme, retour en 3e personne.
+    RunService.RenderStepped:Connect(function()
+        if not pearlSessionAlive then return end
+        if not SheriffAimlockState or MainFrame.Visible then
+            restoreClassicCamera()
+            return
+        end
+
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not char or not hum or not hrp or hum.Health <= 0 then
+            restoreClassicCamera()
+            return
+        end
+
+        -- Verifie si le pistolet Sheriff est actuellement équipé dans la main
+        local holdingGun = false
+        for _, tool in ipairs(char:GetChildren()) do
+            if tool:IsA("Tool") and getToolRole(tool) == "sheriff" then
+                holdingGun = true
+                break
+            end
+        end
+
+        if not holdingGun then
+            restoreClassicCamera()
+            return
+        end
+
+        local murderer = findPlayerByRole("murder")
+        local mChar = murderer and murderer.Character
+        local mHum = mChar and mChar:FindFirstChildOfClass("Humanoid")
+        local mRoot = mChar and (mChar:FindFirstChild("HumanoidRootPart") or mChar:FindFirstChild("UpperTorso") or mChar:FindFirstChild("Torso"))
+        if not mHum or mHum.Health <= 0 or not mRoot then
+            restoreClassicCamera()
+            return
+        end
+
+        -- Verrouille le curseur au centre de l'écran via LockFirstPerson et pointe droit sur le vrai torse serveur (2x2x1) du meurtrier !
+        if LocalPlayer.CameraMode ~= Enum.CameraMode.LockFirstPerson then
+            wasForcedFirstPerson = true
+            LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson
+        end
+
+        local cam = workspace.CurrentCamera
+        if cam then
+            local mVel = mRoot.AssemblyLinearVelocity or Vector3.zero
+            local targetPos = mRoot.Position + (Vector3.new(mVel.X, mVel.Y * 0.2, mVel.Z) * 0.08)
+            cam.CFrame = CFrame.lookAt(cam.CFrame.Position, targetPos)
+            hrp.CFrame = CFrame.lookAt(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
+        end
+    end)
 
     RunService.Heartbeat:Connect(function()
         if not pearlSessionAlive then return end
 
-        -- 1. KILL AURA MEURTRIER (COUTEAU - JUSQU'A 1000m)
+        -- KILL AURA MEURTRIER (COUTEAU - JUSQU'A 1000m)
         if KillAuraState and not killAllToggleState then
             if tick() - lastAuraTime > 0.12 then
                 pcall(function()
@@ -4503,92 +4467,6 @@ do
                     end
                 end)
             end
-        end
-
-        -- 2. HITBOX EXPANDER MEURTRIER (POUR LE SHERIFF / PISTOLET)
-        if MurderHitboxState then
-            pcall(function()
-                local murderer = findPlayerByRole("murder")
-                local sz = math.clamp(MurderHitboxSize or 18, 6, 40)
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p ~= LocalPlayer and p.Character then
-                        local r = p.Character:FindFirstChild("HumanoidRootPart")
-                        local h = p.Character:FindFirstChildOfClass("Humanoid")
-                        if r then
-                            if p == murderer and h and h.Health > 0 then
-                                r.Size = Vector3.new(sz, sz, sz)
-                                r.Transparency = 0.65
-                                r.Color = Color3.fromRGB(255, 55, 65)
-                                r.Material = Enum.Material.Neon
-                                r.CanCollide = false
-                                r.Massless = true
-
-                                local mVel = r.AssemblyLinearVelocity or Vector3.zero
-                                getgenv()._PearlSilentAimActive = true
-                                getgenv()._PearlSilentAimPos = r.Position + (Vector3.new(mVel.X, mVel.Y * 0.2, mVel.Z) * 0.12)
-                                getgenv()._PearlSilentAimPart = r
-                            else
-                                if r.Size.X > 3 then
-                                    r.Size = Vector3.new(2, 2, 1)
-                                    r.Transparency = 1
-                                    r.CanCollide = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-
-        -- 3. AUTO DODGE MEURTRIER (ULTRA INSTINCT - ESQUIVE AUTOMATIQUE)
-        if AutoDodgeMurderState and not (FlingState and FlingState.Conn) and (tick() - lastDodgeTime > 0.35) then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if not char or not hrp or not hum or hum.Health <= 0 then return end
-                if getPlayerRole(LocalPlayer) == "murder" then return end
-
-                local murderer = findPlayerByRole("murder")
-                if not murderer or not murderer.Character then return end
-                local mHum = murderer.Character:FindFirstChildOfClass("Humanoid")
-                local mRoot = murderer.Character:FindFirstChild("HumanoidRootPart")
-                if not mHum or mHum.Health <= 0 or not mRoot then return end
-
-                local dangerDist = math.clamp(AutoDodgeDistance or 16, 10, 30)
-                local curDist = (hrp.Position - mRoot.Position).Magnitude
-                if curDist <= dangerDist then
-                    lastDodgeTime = tick()
-                    local awayDir = (hrp.Position - mRoot.Position)
-                    awayDir = Vector3.new(awayDir.X, 0, awayDir.Z)
-                    if awayDir.Magnitude < 0.1 then
-                        awayDir = -mRoot.CFrame.LookVector
-                    else
-                        awayDir = awayDir.Unit
-                    end
-
-                    -- Teste plusieurs directions d'esquive a 26 studs du meurtrier sans finir dans un mur
-                    local dodgeCandidates = {
-                        mRoot.Position + (awayDir * 26) + Vector3.new(0, 1.5, 0),
-                        mRoot.Position + (-awayDir * 26) + Vector3.new(0, 1.5, 0),
-                        mRoot.Position + (awayDir:Cross(Vector3.new(0, 1, 0)) * 26) + Vector3.new(0, 1.5, 0),
-                        mRoot.Position + (-awayDir:Cross(Vector3.new(0, 1, 0)) * 26) + Vector3.new(0, 1.5, 0),
-                        hrp.Position + Vector3.new(0, 22, 0),
-                    }
-
-                    local chosenPos = dodgeCandidates[1]
-                    for _, cand in ipairs(dodgeCandidates) do
-                        if hasClearLineOfSight(char, murderer.Character, hrp.Position, cand) then
-                            chosenPos = cand
-                            break
-                        end
-                    end
-
-                    hrp.AssemblyLinearVelocity = Vector3.zero
-                    hrp.CFrame = CFrame.lookAt(chosenPos, Vector3.new(mRoot.Position.X, chosenPos.Y, mRoot.Position.Z))
-                    notify("Auto Dodge", "Esquive du meurtrier (" .. math.floor(curDist) .. "m) !", Colors.Info)
-                end
-            end)
         end
     end)
 end
@@ -5581,10 +5459,7 @@ SaveBtn.MouseButton1Click:Connect(function()
             autoCollect = (pearlAutoCollectState == true),
             killAura = (KillAuraState == true),
             killAuraRange = KillAuraRange or 25,
-            murderHitbox = (MurderHitboxState == true),
-            murderHitboxSize = MurderHitboxSize or 18,
-            autoDodge = (AutoDodgeMurderState == true),
-            autoDodgeDist = AutoDodgeDistance or 16,
+            sheriffAimlock = (SheriffAimlockState == true),
             autoFarmCoins = (pearlAutoFarmState == true),
             autoFarmSpeed = AutoFarmCoinsSpeed or 24,
         },
@@ -5704,19 +5579,9 @@ function loadConfig(name, silent)
         if c.combat.killAuraRange and setKillAuraSlider then
             setKillAuraSlider(c.combat.killAuraRange)
         end
-        if c.combat.murderHitbox ~= nil then
-            MurderHitboxState = (c.combat.murderHitbox == true)
-            if murderHitboxBtn then setToggleBtn(murderHitboxBtn, MurderHitboxState) end
-        end
-        if c.combat.murderHitboxSize and setMurderHitboxSlider then
-            setMurderHitboxSlider(c.combat.murderHitboxSize)
-        end
-        if c.combat.autoDodge ~= nil then
-            AutoDodgeMurderState = (c.combat.autoDodge == true)
-            if autoDodgeMurderBtn then setToggleBtn(autoDodgeMurderBtn, AutoDodgeMurderState) end
-        end
-        if c.combat.autoDodgeDist and setAutoDodgeSlider then
-            setAutoDodgeSlider(c.combat.autoDodgeDist)
+        if c.combat.sheriffAimlock ~= nil then
+            SheriffAimlockState = (c.combat.sheriffAimlock == true)
+            if sheriffAimlockBtn then setToggleBtn(sheriffAimlockBtn, SheriffAimlockState) end
         end
         if c.combat.autoFarmCoins ~= nil then
             pearlAutoFarmState = (c.combat.autoFarmCoins == true)
